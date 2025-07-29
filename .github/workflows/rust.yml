@@ -15,60 +15,75 @@ jobs:
     name: Run Unit Tests
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Run tests
-      run: cargo test --verbose
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: cargo test --verbose
 
   build:
     name: Build and Release
     needs: tests
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v4
-    - name: Build for ${{ matrix.os }}
-      run: cargo build --release --verbose
-    - name: Archive production artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: r-socks5-${{ matrix.os }}
-        path: |
-          target/release/r-socks5
-          target/release/r-socks5.exe
-    - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/production'
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref_name }}-${{ github.run_number }}
-        release_name: Release ${{ github.ref_name }}-${{ github.run_number }}
-        body: |
-          Automated release for ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-    - name: Upload Release Asset (Linux)
-      if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/production'
-      id: upload-release-asset-linux
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: target/release/r-socks5
-        asset_name: r-socks5-linux-x64
-        asset_content_type: application/octet-stream
-    - name: Upload Release Asset (Windows)
-      if: matrix.os == 'windows-latest' && github.event_name == 'push' && github.ref == 'refs/heads/production'
-      id: upload-release-asset-windows
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: target/release/r-socks5.exe
-        asset_name: r-socks5-windows-x64.exe
-        asset_content_type: application/octet-stream
+      - uses: actions/checkout@v4
+      - name: Build for ${{ matrix.os }}
+        run: cargo build --release --verbose
+
+      # Conditionally upload artifacts based on the OS
+      - name: Archive production artifacts (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-socks5-${{ matrix.os }}
+          path: target/release/r-socks5
+
+      - name: Archive production artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: r-socks5-${{ matrix.os }}
+          path: target/release/r-socks5.exe
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
+          release_name: Release ${{ github.ref_name }}-${{ github.run_number }}
+          body: |
+            Automated release for ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      # Upload Linux asset
+      - name: Upload Release Asset (Linux)
+        if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/production'
+        id: upload-release-asset-linux
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: target/release/r-socks5
+          asset_name: r-socks5-linux-x64
+          asset_content_type: application/octet-stream
+
+      # Upload Windows asset
+      - name: Upload Release Asset (Windows)
+        if: matrix.os == 'windows-latest' && github.event_name == 'push' && github.ref == 'refs/heads/production'
+        id: upload-release-asset-windows
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: target/release/r-socks5.exe
+          asset_name: r-socks5-windows-x64.exe
+          asset_content_type: application/octet-stream
