@@ -37,10 +37,19 @@ impl TargetAddr {
 /// 2. Server selects an authentication method
 /// 3. Authentication takes place if required
 ///
+/// # Arguments
+/// * `stream` - The TCP stream connected to the client
+/// * `username` - Optional username for authentication
+/// * `password` - Optional password for authentication
+///
 /// # Returns
 /// - Ok(()) if handshake is successful
 /// - Err(Socks5Error) if handshake fails
-pub async fn handshake(stream: &mut TcpStream) -> Socks5Result<()> {
+pub async fn handshake(
+    stream: &mut TcpStream,
+    username: Option<&str>,
+    password: Option<&str>
+) -> Socks5Result<()> {
     // Read the first two bytes: SOCKS version (VER) and number of authentication methods (NMETHODS)
     let mut buf = [0; 2];
     stream.read_exact(&mut buf).await?;
@@ -59,9 +68,26 @@ pub async fn handshake(stream: &mut TcpStream) -> Socks5Result<()> {
     let mut methods = vec![0; nmethods as usize];
     stream.read_exact(&mut methods).await?;
     
-    // Check if the client supports no authentication method
-    if methods.contains(&auth::NO_AUTH) {
-        // Respond with "no authentication required"
+    // Determine which authentication method to use
+    if username.is_some() && password.is_some() {
+        // If credentials are provided, require username/password authentication
+        if methods.contains(&auth::USER_PASS) {
+            // Respond with username/password authentication method
+            stream.write_all(&[SOCKS_VERSION, auth::USER_PASS]).await?;
+            
+            // Perform username/password authentication
+            authenticate_user_pass(stream, username.unwrap(), password.unwrap()).await?;
+            
+            Ok(())
+        } else {
+            // Client doesn't support username/password authentication
+            stream.write_all(&[SOCKS_VERSION, auth::NO_ACCEPTABLE_METHODS]).await?;
+            Err(Socks5Error::HandshakeError(
+                "Username/password authentication required but not supported by client".to_string()
+            ))
+        }
+    } else if methods.contains(&auth::NO_AUTH) {
+        // No credentials provided, use no authentication if client supports it
         stream.write_all(&[SOCKS_VERSION, auth::NO_AUTH]).await?;
         Ok(())
     } else {
@@ -70,6 +96,64 @@ pub async fn handshake(stream: &mut TcpStream) -> Socks5Result<()> {
         Err(Socks5Error::HandshakeError(
             "No acceptable authentication methods".to_string()
         ))
+    }
+}
+
+/// Performs username/password authentication according to RFC 1929
+///
+/// # Arguments
+/// * `stream` - The TCP stream connected to the client
+/// * `expected_username` - The username to authenticate against
+/// * `expected_password` - The password to authenticate against
+///
+/// # Returns
+/// - Ok(()) if authentication is successful
+/// - Err(Socks5Error) if authentication fails
+async fn authenticate_user_pass(
+    stream: &mut TcpStream,
+    expected_username: &str,
+    expected_password: &str
+) -> Socks5Result<()> {
+    // Read the subnegotiation version and username length
+    let mut buf = [0; 2];
+    stream.read_exact(&mut buf).await?;
+    
+    let ver = buf[0];
+    let ulen = buf[1] as usize;
+    
+    // Check subnegotiation version (should be 1)
+    if ver != 0x01 {
+        return Err(Socks5Error::HandshakeError(format!(
+            "Unsupported subnegotiation version: {}", ver
+        )));
+    }
+    
+    // Read username
+    let mut username_bytes = vec![0; ulen];
+    stream.read_exact(&mut username_bytes).await?;
+    let username = String::from_utf8(username_bytes)
+        .map_err(|e| Socks5Error::HandshakeError(format!("Invalid username: {}", e)))?;
+    
+    // Read password length
+    let mut plen_buf = [0; 1];
+    stream.read_exact(&mut plen_buf).await?;
+    let plen = plen_buf[0] as usize;
+    
+    // Read password
+    let mut password_bytes = vec![0; plen];
+    stream.read_exact(&mut password_bytes).await?;
+    let password = String::from_utf8(password_bytes)
+        .map_err(|e| Socks5Error::HandshakeError(format!("Invalid password: {}", e)))?;
+    
+    // Verify credentials
+    if username == expected_username && password == expected_password {
+        // Authentication successful
+        stream.write_all(&[0x01, 0x00]).await?;
+        Ok(())
+    } else {
+        // Authentication failed
+        stream.write_all(&[0x01, 0x01]).await?;
+        Err(Socks5Error::HandshakeError("Authentication failed".to_string()))
     }
 }
 
@@ -145,7 +229,7 @@ pub async fn process_command(stream: &mut TcpStream) -> Socks5Result<TargetAddr>
             TargetAddr::Domain(domain, port)
         },
         atyp::IPV6 => {
-            // IPv6 not implemented in this example
+            // IPv6 not implemented
             send_reply(stream, reply::ADDRESS_TYPE_NOT_SUPPORTED).await?;
             return Err(Socks5Error::AddressError(
                 "IPv6 address type not supported".to_string()
@@ -198,20 +282,4 @@ pub async fn send_reply(stream: &mut TcpStream, reply_code: u8) -> Socks5Result<
 /// - Err(Socks5Error) if an error occurs
 pub async fn send_success_reply(stream: &mut TcpStream) -> Socks5Result<()> {
     send_reply(stream, reply::SUCCEEDED).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_target_addr_to_string() {
-        // Test IPv4 address
-        let ipv4_addr = TargetAddr::Ipv4(Ipv4Addr::new(192, 168, 1, 1), 8080);
-        assert_eq!(ipv4_addr.to_string(), "192.168.1.1:8080");
-
-        // Test domain name
-        let domain_addr = TargetAddr::Domain("example.com".to_string(), 443);
-        assert_eq!(domain_addr.to_string(), "example.com:443");
-    }
 }

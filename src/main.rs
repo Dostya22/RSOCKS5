@@ -20,6 +20,14 @@ struct Args {
     /// Log level (trace, debug, info, warn, error)
     #[arg(short, long, default_value = "info", value_parser = validate_log_level)]
     log_level: String,
+    
+    /// Username for SOCKS5 authentication (requires password to be set as well)
+    #[arg(short = 'U', long)]
+    username: Option<String>,
+    
+    /// Password for SOCKS5 authentication (requires username to be set as well)
+    #[arg(short = 'P', long)]
+    password: Option<String>,
 }
 
 /// Validates that the provided string is a valid IP address
@@ -48,14 +56,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse command-line arguments
     let args = Args::parse();
     
+    // Validate that both username and password are provided if either is provided
+    if args.username.is_some() != args.password.is_some() {
+        return Err("Both username and password must be provided if either is provided".into());
+    }
+    
     // Initialize the logger with the specified log level
     env_logger::Builder::from_env(Env::default().default_filter_or(&args.log_level)).init();
     
     // Log server start
     log::info!("Starting SOCKS5 proxy server on {}:{}", args.ip, args.port);
     
-    // Create a new server instance with the specified IP and port
-    let server = Server::new(args.ip.clone(), Some(args.port));
+    // Log authentication status
+    if args.username.is_some() {
+        log::info!("Authentication required with username: {}", args.username.as_ref().unwrap());
+    } else {
+        log::info!("No authentication required");
+    }
+    
+    // Create a new server instance with the specified IP, port, and authentication credentials
+    let server = Server::new(
+        args.ip.clone(), 
+        Some(args.port),
+        args.username.clone(),
+        args.password.clone()
+    );
     
     // Run the server
     server.run().await?;

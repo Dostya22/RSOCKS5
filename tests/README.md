@@ -1,10 +1,10 @@
-# R-SOCKS5 Testing Documentation
+# RSOCKS5 Testing Documentation
 
-This document describes the testing approach for the R-SOCKS5 project, a SOCKS5 proxy server implemented in Rust.
+This document describes the testing approach for the RSOCKS5 project, a SOCKS5 proxy server implemented in Rust.
 
 ## Testing Approach
 
-The testing strategy for R-SOCKS5 includes:
+The testing strategy for RSOCKS5 includes:
 
 1. **Unit Tests**: Testing individual components in isolation
 2. **Integration Tests**: Testing the interaction between components

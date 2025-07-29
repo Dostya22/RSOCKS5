@@ -3,14 +3,17 @@
 //! A SOCKS5 proxy server implementation in Rust using Tokio for asynchronous I/O.
 //! 
 //! This library provides a modular implementation of the SOCKS5 protocol as defined in
-//! [RFC 1928](https://datatracker.ietf.org/doc/html/rfc1928).
+//! [RFC 1928](https://datatracker.ietf.org/doc/html/rfc1928), with username/password
+//! authentication as defined in [RFC 1929](https://datatracker.ietf.org/doc/html/rfc1929).
 //! 
 //! ## Features
 //! 
 //! - SOCKS5 protocol implementation
 //! - Support for CONNECT command
 //! - IPv4 and domain name address types
-//! - No authentication method
+//! - Authentication methods:
+//!   - No authentication
+//!   - Username/password authentication
 //! - Asynchronous I/O using Tokio
 
 pub mod constants;

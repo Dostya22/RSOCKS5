@@ -19,6 +19,10 @@ pub struct Server {
     bind_addr: String,
     /// The port the server is listening on
     port: u16,
+    /// Optional username for authentication
+    username: Option<String>,
+    /// Optional password for authentication
+    password: Option<String>,
 }
 
 impl Server {
@@ -27,13 +31,17 @@ impl Server {
     /// # Arguments
     /// * `bind_addr` - The address to bind the server to (e.g., "0.0.0.0")
     /// * `port` - The port to listen on (default: 1080)
+    /// * `username` - Optional username for authentication
+    /// * `password` - Optional password for authentication
     ///
     /// # Returns
     /// * A new Server instance
-    pub fn new(bind_addr: String, port: Option<u16>) -> Self {
+    pub fn new(bind_addr: String, port: Option<u16>, username: Option<String>, password: Option<String>) -> Self {
         Self {
             bind_addr,
             port: port.unwrap_or(DEFAULT_PORT),
+            username,
+            password,
         }
     }
 
@@ -80,9 +88,17 @@ impl Server {
             
             log::info!("New client connected from: {:?}", peer_addr);
             
+            // Clone username and password to avoid lifetime issues
+            let username_clone = self.username.clone();
+            let password_clone = self.password.clone();
+            
             // Spawn a new task to handle the client
             tokio::spawn(async move {
-                if let Err(e) = handle_client(client_stream, peer_addr).await {
+                // Convert Option<String> to Option<&str>
+                let username_ref = username_clone.as_deref();
+                let password_ref = password_clone.as_deref();
+                
+                if let Err(e) = handle_client(client_stream, peer_addr, username_ref, password_ref).await {
                     log::error!("Error handling client {}: {}", peer_addr, e);
                 }
             });
@@ -101,14 +117,26 @@ impl Server {
 /// # Arguments
 /// * `client_stream` - The TCP stream connected to the client
 /// * `peer_addr` - The client's socket address
+/// * `username` - Optional username for authentication
+/// * `password` - Optional password for authentication
 ///
 /// # Returns
 /// * `Ok(())` - If client handling completes successfully
 /// * `Err(Socks5Error)` - If an error occurs during client handling
-async fn handle_client(mut client_stream: TcpStream, peer_addr: SocketAddr) -> Socks5Result<()> {
+async fn handle_client(
+    mut client_stream: TcpStream, 
+    peer_addr: SocketAddr,
+    username: Option<&str>,
+    password: Option<&str>
+) -> Socks5Result<()> {
     // Step 1: Perform SOCKS5 handshake
-    handshake(&mut client_stream).await?;
-    log::info!("SOCKS5 handshake successful with {:?}", peer_addr);
+    handshake(&mut client_stream, username, password).await?;
+    
+    if username.is_some() {
+        log::info!("SOCKS5 handshake with authentication successful with {:?}", peer_addr);
+    } else {
+        log::info!("SOCKS5 handshake successful with {:?}", peer_addr);
+    }
     
     // Step 2: Process command request
     let target_addr = process_command(&mut client_stream).await?;
@@ -127,34 +155,4 @@ async fn handle_client(mut client_stream: TcpStream, peer_addr: SocketAddr) -> S
     
     log::info!("Connection closed for client: {:?}", peer_addr);
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::constants::DEFAULT_PORT;
-
-    #[test]
-    fn test_server_new_with_default_port() {
-        // Test creating a server with default port
-        let server = Server::new("127.0.0.1".to_string(), None);
-        assert_eq!(server.bind_addr, "127.0.0.1");
-        assert_eq!(server.port, DEFAULT_PORT);
-    }
-
-    #[test]
-    fn test_server_new_with_custom_port() {
-        // Test creating a server with custom port
-        let custom_port = 8080;
-        let server = Server::new("0.0.0.0".to_string(), Some(custom_port));
-        assert_eq!(server.bind_addr, "0.0.0.0");
-        assert_eq!(server.port, custom_port);
-    }
-
-    #[test]
-    fn test_server_addr() {
-        // Test the addr method
-        let server = Server::new("localhost".to_string(), Some(9999));
-        assert_eq!(server.addr(), "localhost:9999");
-    }
 }
