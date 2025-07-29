@@ -20,11 +20,9 @@ jobs:
         run: cargo test --verbose
 
   build:
-    name: Build and Release
+    name: Build ${{ matrix.os }}
     needs: tests
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -33,57 +31,69 @@ jobs:
       - name: Build for ${{ matrix.os }}
         run: cargo build --release --verbose
 
-      # Conditionally upload artifacts based on the OS
       - name: Archive production artifacts (Linux)
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: rsocks5-${{ matrix.os }}
+          name: rsocks5-linux-x64
           path: target/release/rsocks5
 
       - name: Archive production artifacts (Windows)
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: rsocks5-${{ matrix.os }}
+          name: rsocks5-windows-x64
           path: target/release/rsocks5.exe
 
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+    steps:
+      - name: Generate unique tag
+        id: generate_tag
+        run: |
+          timestamp=$(date +'%Y%m%d%H%M%S')
+          tag_name="${{ github.ref_name }}-${timestamp}"
+          echo "tag_name=$tag_name" >> $GITHUB_OUTPUT
+
       - name: Create Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/production'
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
-          release_name: Release ${{ github.ref_name }}-${{ github.run_number }}
+          tag_name: ${{ steps.generate_tag.outputs.tag_name }}
+          release_name: Release ${{ steps.generate_tag.outputs.tag_name }}
           body: |
             Automated release for ${{ github.ref_name }}
           draft: false
           prerelease: false
 
-      # Upload Linux asset
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
       - name: Upload Release Asset (Linux)
-        if: matrix.os == 'ubuntu-latest' && github.event_name == 'push' && github.ref == 'refs/heads/production'
-        id: upload-release-asset-linux
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/rsocks5
+          asset_path: ./artifacts/rsocks5-linux-x64/rsocks5
           asset_name: rsocks5-linux-x64
           asset_content_type: application/octet-stream
 
-      # Upload Windows asset
       - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest' && github.event_name == 'push' && github.ref == 'refs/heads/production'
-        id: upload-release-asset-windows
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/rsocks5.exe
+          asset_path: ./artifacts/rsocks5-windows-x64/rsocks5.exe
           asset_name: rsocks5-windows-x64.exe
           asset_content_type: application/octet-stream
