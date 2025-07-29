@@ -38,15 +38,15 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: r-socks5-${{ matrix.os }}
-          path: target/release/r-socks5
+          name: rsocks5-${{ matrix.os }}
+          path: target/release/rsocks5
 
       - name: Archive production artifacts (Windows)
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: r-socks5-${{ matrix.os }}
-          path: target/release/r-socks5.exe
+          name: rsocks5-${{ matrix.os }}
+          path: target/release/rsocks5.exe
 
       - name: Create Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/production'
@@ -71,8 +71,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/r-socks5
-          asset_name: r-socks5-linux-x64
+          asset_path: target/release/rsocks5
+          asset_name: rsocks5-linux-x64
           asset_content_type: application/octet-stream
 
       # Upload Windows asset
@@ -84,6 +84,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: target/release/r-socks5.exe
-          asset_name: r-socks5-windows-x64.exe
+          asset_path: target/release/rsocks5.exe
+          asset_name: rsocks5-windows-x64.exe
           asset_content_type: application/octet-stream
