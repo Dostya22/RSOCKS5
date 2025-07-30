@@ -26,7 +26,7 @@ RSOCKS5 is a lightweight, high-performance SOCKS5 proxy server that implements t
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/RSOCKS5.git
+   git clone https://github.com/Dostya22/RSOCKS5.git
    cd RSOCKS5
    ```
 
